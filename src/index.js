@@ -20,9 +20,22 @@ io.on('connection', (socket) => {
 
     socket.emit('message', 'Welcome!!');
 
-    socket.on('sendMessage', (message) => {
+    socket.broadcast.emit('message', 'A new user has joined!');
+
+    socket.on('sendMessage', (message, callback) => {
         io.emit('message', message);
-    })
+        callback();
+    });
+
+    socket.on('sendLocation', (location, callback) => {
+        io.emit('message', `https://google.com/maps?q=${location.latitude},${location.longitude}`);
+        callback();
+    });
+
+    socket.on('disconnect', () => {
+        io.emit('message', 'A user has disconnected.')
+    });
+
 })
 
 server.listen(port, () => {
