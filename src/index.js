@@ -3,6 +3,7 @@ const http = require('http')
 const path = require('path')
 const socketio = require('socket.io')
 const { generateMessage, generateLocationMessage } = require('./utils/messages')
+const { getUser, getUsersInRoom, removeUser, addUser } = require('./utils/users')
  
 const app = express()
 const server = http.createServer(app)
@@ -17,27 +18,49 @@ io.on('connection', (socket) => {
     console.log('New WebSocket Connection!')
     // socket.emit emits to a pirticular socket whereas io.emit emits to all socket
 
-    
+    socket.on('join', ({username, room}, callback) => {
+        const { error, user} = addUser({ id: socket.id, username, room})
 
-    socket.on('join', ({username, room}) => {
-        socket.join(room)
-        socket.emit('message', generateMessage('Welcome!'))
-        socket.broadcast.to(room).emit('message', generateMessage(`${username} has joined`))
+        if(error) {
+            return callback(error)
+        }
+        socket.join(user.room)
+        socket.emit('message', generateMessage('Admin', 'Welcome!'))
+        socket.broadcast.to(user.room).emit('message', generateMessage('Admin', `${user.username} has joined`))
+        io.to(user.room).emit('roomData', {
+            room: user.room,
+            users: getUsersInRoom(user.room)
+        })
+
+        callback()
 
     })
 
     socket.on('sendMessage', (message, callback) => {
-        io.emit('message', generateMessage(message))
+        const user = getUser(socket.id)
+        io.to(user.room).emit('message', generateMessage(user.username,  message))
         callback()
     })
 
     socket.on('sendLocation', (location, callback) => {
-        io.emit('locationMessage', generateLocationMessage(`https://google.com/maps?q=${location.latitude},${location.longitude}`))
+        const user = getUser(socket.id)
+
+        io.to(user.room).emit('locationMessage', generateLocationMessage(user.username, 
+            `https://google.com/maps?q=${location.latitude},${location.longitude}`))
+
         callback()
     })
 
     socket.on('disconnect', () => {
-        io.emit('message', generateMessage('A user has disconnected.'))
+        const user = removeUser(socket.id)
+
+        if(user) {
+            io.to(user.room).emit('message', generateMessage('Admin', `${user.username} has left.`)) 
+            io.to(user.room).emit('roomData', {
+                room: user.room,
+                users: getUsersInRoom(user.room)
+            })
+        }
     })
 
 })
